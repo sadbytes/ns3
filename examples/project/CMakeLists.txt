@@ -12,6 +12,7 @@ build_example(
       ${libapplications}
       ${libnode-manager}
       ${libsink-manager}
+      ${libmalicious-node-manager}
       ${libutils}
   )
 

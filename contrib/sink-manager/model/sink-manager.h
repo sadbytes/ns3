@@ -23,6 +23,8 @@ class SinkManager
     uint8_t* converted_ca_public_key;
     int converted_ca_public_key_size;
 
+    float total_energy_consumed;
+
     void InitializeCA();
     X509* GenerateUserCertificate(X509_REQ* csr);
     X509_REQ* ConvertToX509_REQ(uint8_t* derData, int length);

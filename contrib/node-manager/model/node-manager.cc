@@ -28,13 +28,7 @@ NS_LOG_COMPONENT_DEFINE("NodeManagerLog");
 
 std::vector<ns3::InetSocketAddress> NodeManager::node_address_list;
 float NodeManager::energy_consumed = 0.0f;
-float NodeManager::GetAverageEnergy(int total_nodes)
-{
-    if (total_nodes == 0) {
-        return 6.9f; 
-    }
-    return energy_consumed / total_nodes;
-}
+int NodeManager::total_nodes = 0;
 
 NodeManager::NodeManager(Ptr<Node> node,
                          uint16_t node_id,
@@ -45,9 +39,13 @@ NodeManager::NodeManager(Ptr<Node> node,
       node_address(address),
       sink_address(sinkAddress)
 {
-    uint8_t lastByte = node_address.GetIpv4().Get() & 0xFF;
-    INFO_LOG(node_address.GetIpv4() << "  " << static_cast<int>(lastByte));
-    INFO_LOG("Generating Node CSR");
+    start_time = Simulator::Now().GetSeconds();
+
+    sink_distance_score = rand() % 100 + 1;
+
+    // uint8_t lastByte = node_address.GetIpv4().Get() & 0xFF;
+    // INFO_LOG(node_address.GetIpv4() << "  " << static_cast<int>(lastByte));
+    INFO_LOG("Generating Node " << node_id << " CSR");
     GenerateKeypairAndCSR();
 
     node_socket = Socket::CreateSocket(node, TypeId::LookupByName("ns3::UdpSocketFactory"));
@@ -59,11 +57,23 @@ NodeManager::NodeManager(Ptr<Node> node,
 
 NodeManager::~NodeManager()
 {
-    // INFO_LOG("Total energy consumed by node on address " << node_address.GetIpv4() << " is "
-                                                        //  << (total_energy_consumed * 0.0000001)
-                                                        //  << " Joules");
-    energy_consumed += total_energy_consumed * 0.0000001;
-    INFO_LOG(GetAverageEnergy(node_address_list.size()));
+    float total_energy_consumed_power_down_mode = PowerDownModeEnergyConsumption(
+        Simulator::Now().GetSeconds() - start_time - active_mode_time);
+
+    float total_energy_consumed_active_mode = ActiveModeEnergyConsumption(active_mode_time);
+
+    total_energy_consumed += total_energy_consumed_power_down_mode;
+    total_energy_consumed += total_energy_consumed_active_mode;
+
+    INFO_LOG("Node " << node_id << " consumed " << total_energy_consumed << "J");
+    // , Sent "<< total_bytes_sent << " bytes and Received " << total_bytes_received         << "
+    // bytes.");
+
+    energy_consumed += total_energy_consumed;
+    if (node_id == total_nodes)
+    {
+        INFO_LOG("Average Energy consumed: " << GetAverageEnergy() << "J");
+    }
 }
 
 void
@@ -72,10 +82,10 @@ NodeManager::SendMessage(InetSocketAddress destination_address,
                          int buffer_length)
 {
     INFO_LOG("Sending data from " << node_address.GetIpv4() << " to "
-                                  << destination_address.GetIpv4());
-    float energy_consumed = 50 * 8 * buffer_length;
-    total_energy_consumed += energy_consumed;
-    INFO_LOG("Energy consumed by node to send the data: " << energy_consumed << "pJ");
+                                  << destination_address.GetIpv4() << " of size " << buffer_length);
+    total_bytes_sent += buffer_length;
+    total_energy_consumed += DataTransmitEnergyConsumption(buffer_length);
+
     Ptr<Packet> packet = Create<Packet>(buffer, buffer_length);
     node_socket->SendTo(packet, 0, destination_address);
     // INFO_LOG("Message sent to: ");
@@ -84,7 +94,8 @@ NodeManager::SendMessage(InetSocketAddress destination_address,
 void
 NodeManager::GenerateKeypairAndCSR()
 {
-    // Generate ECC private key
+    float function_start_time = Simulator::Now().GetSeconds();
+
     EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
     if (!pctx || EVP_PKEY_keygen_init(pctx) <= 0 ||
         EVP_PKEY_CTX_set_ec_paramgen_curve_nid(pctx, NID_X9_62_prime256v1) <= 0)
@@ -94,7 +105,6 @@ NodeManager::GenerateKeypairAndCSR()
         return;
     }
 
-    // Generate ECC key pair
     if (EVP_PKEY_keygen(pctx, &node_keypair) <= 0)
     {
         ERROR_LOG("Error generating ECC key");
@@ -104,7 +114,6 @@ NodeManager::GenerateKeypairAndCSR()
 
     EVP_PKEY_CTX_free(pctx);
 
-    // Create CSR and set public key
     node_csr = X509_REQ_new();
     if (!node_csr || X509_REQ_set_pubkey(node_csr, node_keypair) <= 0)
     {
@@ -113,7 +122,6 @@ NodeManager::GenerateKeypairAndCSR()
         return;
     }
 
-    // Sign the CSR
     if (X509_REQ_sign(node_csr, node_keypair, EVP_sha256()) <= 0)
     {
         ERROR_LOG("Error signing CSR");
@@ -122,11 +130,15 @@ NodeManager::GenerateKeypairAndCSR()
     }
 
     SUCCESS_LOG("User private key and CSR generated successfully.");
+
+    active_mode_time += Simulator::Now().GetSeconds() - function_start_time;
 }
 
 bool
 NodeManager::VerifyCertificate(X509* cert)
 {
+    float function_start_time = Simulator::Now().GetSeconds();
+
     if (!cert || !sink_public_key)
     {
         ERROR_LOG("Certificate or public key is missing.");
@@ -142,6 +154,8 @@ NodeManager::VerifyCertificate(X509* cert)
         return false;
     }
 
+    active_mode_time += Simulator::Now().GetSeconds() - function_start_time;
+
     INFO_LOG("Certificate verified successfully.");
     return true;
 }
@@ -149,7 +163,8 @@ NodeManager::VerifyCertificate(X509* cert)
 uint8_t*
 NodeManager::SignData(const uint8_t* data, size_t data_size, int& sig_size)
 {
-    // Create a context for the signing operation
+    float function_start_time = Simulator::Now().GetSeconds();
+
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx)
     {
@@ -206,6 +221,8 @@ NodeManager::SignData(const uint8_t* data, size_t data_size, int& sig_size)
 
     EVP_MD_CTX_free(ctx);
 
+    active_mode_time += Simulator::Now().GetSeconds() - function_start_time;
+
     return signature;
 }
 
@@ -216,6 +233,8 @@ NodeManager::VerifyData(const uint8_t* data,
                         int sig_size,
                         X509* cert)
 {
+    float function_start_time = Simulator::Now().GetSeconds();
+
     EVP_PKEY* public_key = X509_get_pubkey(cert);
     if (!public_key)
     {
@@ -258,14 +277,18 @@ NodeManager::VerifyData(const uint8_t* data,
         ERROR_LOG("Signature verification failed: " << ERR_error_string(ERR_get_error(), nullptr));
         return false;
     }
+
+    active_mode_time += Simulator::Now().GetSeconds() - function_start_time;
+
     return true;
 }
 
 void
 NodeManager::StartConnectionWithNeighbours()
 {
+    uint8_t size = node_address_list.size();
     node_address_list.push_back(node_address);
-    for (uint8_t i = 0; i < node_address_list.size() - 1; ++i)
+    for (uint8_t i = 0; i < size; ++i)
     {
         ConnectWithNeighbourNode(node_address_list[i]);
     }
@@ -324,7 +347,7 @@ NodeManager::CertificateEnrollment()
     int total_size = 2 + request_content_length;
     uint8_t* packet_buffer = GeneratePacketBuffer(request_type, request_content, total_size);
 
-    Simulator::Schedule(Seconds(1),
+    Simulator::Schedule(Seconds(0.1), // add delay based on thier id
                         &NodeManager::SendMessage,
                         this,
                         sink_address,
@@ -337,16 +360,17 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
 {
     Address received_from;
     Ptr<Packet> packet = socket->RecvFrom(received_from);
+    int packet_size = static_cast<int>(packet->GetSize());
     InetSocketAddress destination_address = InetSocketAddress::ConvertFrom(received_from);
 
     INFO_LOG("Node " << node_address.GetIpv4() << " received data from "
-                     << destination_address.GetIpv4() << " of packet of size " << packet->GetSize()
+                     << destination_address.GetIpv4() << " of packet of size " << packet_size
                      << " bytes");
-    float energy_consumed = 25 * 8 * packet->GetSize();
-    total_energy_consumed += energy_consumed;
-    INFO_LOG("Energy consumed by node to receive the data: " << energy_consumed << "pJ");
 
-    std::vector<uint8_t> received_data(packet->GetSize());
+    total_energy_consumed += DataReceiveEnergyConsumption(packet_size);
+    total_bytes_received += packet_size;
+
+    std::vector<uint8_t> received_data(packet_size);
     packet->CopyData(received_data.data(), received_data.size());
 
     int packet_content_size = received_data.size() - 1;
@@ -357,6 +381,18 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
     // int response_size = 0;
     switch (request_type)
     {
+    case 2: {
+        SinkPathBroadcastResponse(destination_address);
+    }
+
+    case 3: {
+        SUCCESS_LOG("Reveived data from NODE " << destination_address.GetIpv4());
+    }
+
+    case 6: {
+        ParseSinkPathBroadcastResponse(destination_address, packet_content);
+    }
+
     case 7: {
         int offset = 0;
 
@@ -389,6 +425,7 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
             if (VerifyData(data, total_size, signed_data, signature_size, cert))
             {
                 SUCCESS_LOG("Signature of node " << destination_address.GetIpv4() << " verified.");
+                verified_nodes.push_back(destination_address);
                 ConnectWithNeighbourNode(destination_address);
             }
             else
@@ -402,9 +439,10 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         }
         break;
     }
+
     case 8: {
         sink_public_key = ConvertToEVP_PKEY(packet_content, packet_content_size);
-        INFO_LOG(packet_content_size);
+        // INFO_LOG(packet_content_size);
         if (EVP_PKEY_size(sink_public_key) > 0)
         {
             SUCCESS_LOG("Node " << node_address.GetIpv4() << " received sink public key");
@@ -428,5 +466,93 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         ERROR_LOG("Packet type " << request_type << " not matched.");
         break;
     }
+    }
+}
+
+float
+NodeManager::GetAverageEnergy()
+{
+    if (total_nodes == 0)
+    {
+        return 0.0f;
+    }
+    return energy_consumed / total_nodes;
+}
+
+float
+NodeManager::ActiveModeEnergyConsumption(float time_taken) // time_taken in seconds
+{
+    return 0.0138 * time_taken;
+}
+
+float
+NodeManager::PowerDownModeEnergyConsumption(float time_taken) // time_taken in seconds
+{
+    return 0.0000075 * time_taken;
+}
+
+float
+NodeManager::DataTransmitEnergyConsumption(int data_size)
+{
+    return 50 * 8 * data_size * 0.0000001;
+}
+
+float
+NodeManager::DataReceiveEnergyConsumption(int data_size)
+{
+    return 25 * 8 * data_size * 0.0000001;
+}
+
+void
+NodeManager::SinkPathBroadcastRequest()
+{
+    uint8_t size = node_address_list.size();
+    uint8_t packet_type = 2;
+    for (uint8_t i = 0; i < size; ++i)
+    {
+        if (node_address != node_address_list[i])
+        {
+            SendMessage(node_address_list[i], &packet_type, 1);
+        }
+    }
+}
+
+void
+NodeManager::SinkPathBroadcastResponse(InetSocketAddress address)
+{
+    uint8_t packet_type = 6;
+    uint8_t packet_buffer[2];
+    packet_buffer[0] = packet_type;
+    packet_buffer[1] = sink_distance_score;
+
+    Simulator::Schedule(Seconds(node_id), &NodeManager::SendMessage,this, address, packet_buffer, 2);
+}
+
+void
+NodeManager::ParseSinkPathBroadcastResponse(InetSocketAddress address, uint8_t* packet_content)
+{
+    bool is_address_present = false;
+    uint8_t size = verified_nodes.size();
+    for (uint8_t i = 0; i < size; ++i)
+    {
+        if (verified_nodes[i] == address)
+        {
+            is_address_present = true;
+        }
+    }
+
+    if (!is_address_present)
+    {
+        ERROR_LOG("Black hole attack detected");
+    }
+    else
+    {
+        uint8_t score = packet_content[0];
+        if (score > best_socored_neighbour.second)
+        {
+            INFO_LOG("New best Node: " << address.GetIpv4());
+            best_socored_neighbour.first = address;
+            best_socored_neighbour.second = score;
+        }
     }
 }

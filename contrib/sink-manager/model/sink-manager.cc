@@ -180,7 +180,8 @@ SinkManager::SendMessage(InetSocketAddress destination_address,
     // INFO_LOG("Destination PORT: " << destination_address.GetPort());
     INFO_LOG("Sending data from " << address.GetIpv4() << " to " << destination_address.GetIpv4());
     float energy_consumed = 59.2 * buffer_length;
-    INFO_LOG("Energy consumed by sink to send the data: " << energy_consumed << "µJ");
+    total_energy_consumed += energy_consumed;
+    // INFO_LOG("Energy consumed by sink to send the data: " << energy_consumed << "µJ");
     Ptr<Packet> packet = Create<Packet>(buffer, buffer_length);
     sinkSocket->SendTo(packet, 0, destination_address);
     // INFO_LOG("Message sent to: ");
@@ -197,8 +198,9 @@ SinkManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
 
     INFO_LOG("Sink Received from " << InetSocketAddress::ConvertFrom(received_from).GetIpv4()
                                    << " of Size: " << packet->GetSize());                                   
-    float energy_consumed = 28.6 * received_packet_size;                                   
-    INFO_LOG("Energy consumed by sink to receive the data: " << energy_consumed << "µJ");
+    float energy_consumed = 28.6 * received_packet_size;    
+    total_energy_consumed += energy_consumed;                               
+    // INFO_LOG("Energy consumed by sink to receive the data: " << energy_consumed << "µJ");
 
 
     uint8_t* received_data = new uint8_t[received_packet_size];
@@ -231,7 +233,7 @@ SinkManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         // InetSocketAddress destination_address =
         //     InetSocketAddress(InetSocketAddress::ConvertFrom(received_from).GetIpv4(), 8080);
         INFO_LOG("Sending User Certificate to " << destination_address.GetIpv4());
-        Simulator::Schedule(Seconds(0.01),
+        Simulator::Schedule(Seconds(0.1),
                             &SinkManager::SendMessage,
                             this,
                             destination_address,
@@ -245,7 +247,7 @@ SinkManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         if (public_key_buffer == nullptr) {
             ERROR_LOG("Failed to generate public key buffer");
         }
-        Simulator::Schedule(Seconds(0.01),
+        Simulator::Schedule(Seconds(0.1),
                             &SinkManager::SendMessage,
                             this,
                             destination_address,

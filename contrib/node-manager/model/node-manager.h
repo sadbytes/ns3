@@ -4,9 +4,6 @@
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
-#include "ns3/point-to-point-module.h"
-#include "ns3/ssid.h"
-#include "ns3/yans-wifi-helper.h"
 
 #include <openssl/x509.h>
 
@@ -16,8 +13,9 @@ class NodeManager
 {
   public:
     static std::vector<InetSocketAddress> node_address_list;
+    static int total_nodes;
     static float energy_consumed; 
-    static float GetAverageEnergy(int total_nodes);
+    static float GetAverageEnergy();
 
 
   public:
@@ -27,7 +25,17 @@ class NodeManager
     Ptr<Socket> node_socket;
     InetSocketAddress sink_address;
     std::vector<InetSocketAddress> request_sent;
+    std::vector<InetSocketAddress> verified_nodes;
+    // std::vector<InetSocketAddress> blacklisted_nodes;
+
+    float start_time;
     float total_energy_consumed = 0;
+    float active_mode_time = 0; // time taken doing processing things
+    int total_bytes_sent;
+    int total_bytes_received;
+
+    uint8_t sink_distance_score; // range from 1-100
+    std::pair<ns3::InetSocketAddress, uint8_t> best_socored_neighbour = std::make_pair(InetSocketAddress("10.1.1.0"), 0);
 
     NodeManager(Ptr<Node> node,
                 uint16_t node_id,
@@ -38,8 +46,18 @@ class NodeManager
                      const uint8_t* buffer,
                      int buffer_length);
     void HandleSocketReceive(Ptr<Socket> socket);
+    
     void StartConnectionWithNeighbours();
     void ConnectWithNeighbourNode(InetSocketAddress address);
+
+    void SinkPathBroadcastRequest();
+    void SinkPathBroadcastResponse(InetSocketAddress address);
+    void ParseSinkPathBroadcastResponse(InetSocketAddress address, uint8_t *packet_content);
+
+    float ActiveModeEnergyConsumption(float time_taken); // time_taken in seconds
+    float PowerDownModeEnergyConsumption(float time_taken); // time_taken in seconds
+    float DataTransmitEnergyConsumption(int data_size); // in bytes
+    float DataReceiveEnergyConsumption(int data_size); // in bytes
 
   public:
     EVP_PKEY* node_keypair = nullptr;
