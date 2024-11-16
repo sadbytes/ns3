@@ -31,7 +31,7 @@ uint8_t*
 ConvertToUint8T(EVP_PKEY* pub_key, int& length)
 {
     length = i2d_PUBKEY(pub_key, nullptr);
-    INFO_LOG("Size of public key: " << length);
+    // INFO_LOG("Size of public key: " << length);
     if (length < 0)
     {
         ERROR_LOG("Error converting X509 to DER format.");

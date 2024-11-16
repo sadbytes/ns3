@@ -11,7 +11,7 @@
 // Testing
 #include <iomanip>
 #include <openssl/err.h>
-#include <openssl/md5.h>
+#include <random>
 
 #undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT                                                                      \
@@ -25,6 +25,10 @@
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("NodeManagerLog");
+
+std::random_device rd; 
+std::mt19937 gen(rd());
+std::uniform_int_distribution<> distrib(1, 100); 
 
 std::vector<ns3::InetSocketAddress> NodeManager::node_address_list;
 float NodeManager::energy_consumed = 0.0f;
@@ -41,7 +45,7 @@ NodeManager::NodeManager(Ptr<Node> node,
 {
     start_time = Simulator::Now().GetSeconds();
 
-    sink_distance_score = rand() % 100 + 1;
+    sink_distance_score = distrib(gen);
 
     // uint8_t lastByte = node_address.GetIpv4().Get() & 0xFF;
     // INFO_LOG(node_address.GetIpv4() << "  " << static_cast<int>(lastByte));
@@ -72,7 +76,7 @@ NodeManager::~NodeManager()
     energy_consumed += total_energy_consumed;
     if (node_id == total_nodes)
     {
-        INFO_LOG("Average Energy consumed: " << GetAverageEnergy() << "J");
+        INFO_LOG("Average Energy consumed: " << GetAverageEnergy() << "Joules");
     }
 }
 
@@ -81,8 +85,8 @@ NodeManager::SendMessage(InetSocketAddress destination_address,
                          const uint8_t* buffer,
                          int buffer_length)
 {
-    INFO_LOG("Sending data from " << node_address.GetIpv4() << " to "
-                                  << destination_address.GetIpv4() << " of size " << buffer_length);
+    // INFO_LOG("Sending data from " << node_address.GetIpv4() << " to "
+                                //   << destination_address.GetIpv4() << " of size " << buffer_length);
     total_bytes_sent += buffer_length;
     total_energy_consumed += DataTransmitEnergyConsumption(buffer_length);
 
@@ -363,9 +367,9 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
     int packet_size = static_cast<int>(packet->GetSize());
     InetSocketAddress destination_address = InetSocketAddress::ConvertFrom(received_from);
 
-    INFO_LOG("Node " << node_address.GetIpv4() << " received data from "
-                     << destination_address.GetIpv4() << " of packet of size " << packet_size
-                     << " bytes");
+    // INFO_LOG("Node " << node_address.GetIpv4() << " received data from "
+    //                  << destination_address.GetIpv4() << " of packet of size " << packet_size
+    //                  << " bytes");
 
     total_energy_consumed += DataReceiveEnergyConsumption(packet_size);
     total_bytes_received += packet_size;
@@ -383,14 +387,17 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
     {
     case 2: {
         SinkPathBroadcastResponse(destination_address);
+        break;
     }
 
     case 3: {
         SUCCESS_LOG("Reveived data from NODE " << destination_address.GetIpv4());
+        break;
     }
 
     case 6: {
         ParseSinkPathBroadcastResponse(destination_address, packet_content);
+        break;
     }
 
     case 7: {
@@ -408,6 +415,7 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         offset += signature_size;
 
         int neighbour_certificate_size = packet_content_size - offset;
+
         uint8_t* neighbour_certificate = new uint8_t[neighbour_certificate_size];
         memcpy(neighbour_certificate, packet_content + offset, neighbour_certificate_size);
 
@@ -498,7 +506,7 @@ NodeManager::DataTransmitEnergyConsumption(int data_size)
 }
 
 float
-NodeManager::DataReceiveEnergyConsumption(int data_size)
+NodeManager::DataReceiveEnergyConsumption(int data_size) 
 {
     return 25 * 8 * data_size * 0.0000001;
 }
@@ -515,22 +523,26 @@ NodeManager::SinkPathBroadcastRequest()
             SendMessage(node_address_list[i], &packet_type, 1);
         }
     }
+    INFO_LOG("Node " << node_address.GetIpv4() << " is sending best path broadcast request");
+    Simulator::Schedule(Seconds(5), &NodeManager::SendDataToBestNode, this);
 }
 
 void
 NodeManager::SinkPathBroadcastResponse(InetSocketAddress address)
 {
-    uint8_t packet_type = 6;
-    uint8_t packet_buffer[2];
+    int packet_type = 6;
+    uint8_t* packet_buffer = new uint8_t(2);
     packet_buffer[0] = packet_type;
     packet_buffer[1] = sink_distance_score;
 
-    Simulator::Schedule(Seconds(node_id), &NodeManager::SendMessage,this, address, packet_buffer, 2);
+    // INFO_LOG("Sending sink distance score of " << sink_distance_score << " to " << address.GetIpv4());
+    Simulator::Schedule(Seconds(0.1), &NodeManager::SendMessage,this, address, packet_buffer, 2);
 }
 
 void
 NodeManager::ParseSinkPathBroadcastResponse(InetSocketAddress address, uint8_t* packet_content)
 {
+    // INFO_LOG("Received Score from " << address.GetIpv4());
     bool is_address_present = false;
     uint8_t size = verified_nodes.size();
     for (uint8_t i = 0; i < size; ++i)
@@ -543,16 +555,28 @@ NodeManager::ParseSinkPathBroadcastResponse(InetSocketAddress address, uint8_t* 
 
     if (!is_address_present)
     {
-        ERROR_LOG("Black hole attack detected");
+        ERROR_LOG("Black hole attack detected, ignoring respose from " << address.GetIpv4());
     }
     else
     {
-        uint8_t score = packet_content[0];
+        int score = static_cast<int>(packet_content[0]);
         if (score > best_socored_neighbour.second)
         {
-            INFO_LOG("New best Node: " << address.GetIpv4());
+            INFO_LOG("Current best score " << score << " is from Node: " << address.GetIpv4());
             best_socored_neighbour.first = address;
             best_socored_neighbour.second = score;
         }
     }
+}
+
+
+void NodeManager::SendDataToBestNode()
+{
+    int packet_type = 3;
+    uint8_t* packet_buffer = new uint8_t(3);
+    packet_buffer[0] = packet_type;
+    std::memcpy(packet_buffer+1, "OK", 2);
+
+    INFO_LOG("Node with the best score is " << best_socored_neighbour.first.GetIpv4());
+    SendMessage(best_socored_neighbour.first, packet_buffer, 3);
 }

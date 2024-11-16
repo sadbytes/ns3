@@ -1,5 +1,5 @@
 #include "malicious-node-manager.h"
-
+#include "ns3/node-manager.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
@@ -30,6 +30,11 @@ MaliciousNodeManager::MaliciousNodeManager(Ptr<Node> node, InetSocketAddress add
         MakeCallback(&MaliciousNodeManager::HandleSocketReceive, this));
 }
 
+void MaliciousNodeManager::AddMaliciousNodeToWSN()
+{
+    NodeManager::node_address_list.push_back(malicous_node_address);
+}
+
 void
 MaliciousNodeManager::SendMessage(InetSocketAddress destination_address,
                          const uint8_t* buffer,
@@ -47,6 +52,8 @@ MaliciousNodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
     int packet_size = static_cast<int>(packet->GetSize());
     InetSocketAddress destination_address = InetSocketAddress::ConvertFrom(received_from);
 
+    // WARN_LOG("Malicious Node Received")
+
     std::vector<uint8_t> received_data(packet_size);
     packet->CopyData(received_data.data(), received_data.size());
 
@@ -62,6 +69,7 @@ MaliciousNodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         uint8_t packet_buffer[2];
         packet_buffer[0] = 6;
         packet_buffer[1] = 100;
+        INFO_LOG("Malicious node responding with the fake best path");
         SendMessage(destination_address, packet_buffer, 2);
     }
     case 5: {

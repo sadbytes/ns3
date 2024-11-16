@@ -34,7 +34,7 @@ class NodeManager
     int total_bytes_sent;
     int total_bytes_received;
 
-    uint8_t sink_distance_score; // range from 1-100
+    int sink_distance_score; // range from 1-100
     std::pair<ns3::InetSocketAddress, uint8_t> best_socored_neighbour = std::make_pair(InetSocketAddress("10.1.1.0"), 0);
 
     NodeManager(Ptr<Node> node,
@@ -53,6 +53,7 @@ class NodeManager
     void SinkPathBroadcastRequest();
     void SinkPathBroadcastResponse(InetSocketAddress address);
     void ParseSinkPathBroadcastResponse(InetSocketAddress address, uint8_t *packet_content);
+    void SendDataToBestNode();
 
     float ActiveModeEnergyConsumption(float time_taken); // time_taken in seconds
     float PowerDownModeEnergyConsumption(float time_taken); // time_taken in seconds

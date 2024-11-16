@@ -22,6 +22,7 @@ build_lib(
         ${libnetwork}
         ${libwifi}
         ${libinternet}
+        ${libnode-manager}
     TEST_SOURCES test/malicious-node-manager-test-suite.cc
                  ${examples_as_tests_sources}
 )

@@ -6,7 +6,7 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/sink-manager.h"
 #include "ns3/utils.h"
-// #include "ns3/malicious-node-manager.h"
+#include "ns3/malicious-node-manager.h"
 
 #include <random>
 
@@ -27,20 +27,21 @@ main()
     // LogComponentEnable("MaliciousNodeManagerLog", LOG_LEVEL_ALL);
     LogComponentEnable("UtilsLog", LOG_LEVEL_ALL);
 
-    int total_nodes = 20;
+    int total_nodes = 5;
     NodeManager::total_nodes = total_nodes;
 
     std::vector<NodeManager> NodeItemContainer;
 
     Ptr<Node> sink = CreateObject<Node>();
 
-    // Ptr<Node> malicious_node = CreateObject<Node>();
+    Ptr<Node> malicious_node = CreateObject<Node>();
 
     NodeContainer devices;
     devices.Add(sink);
     devices.Create(total_nodes);
-    // devices.Add(malicious_node);
+    devices.Add(malicious_node);
 
+    // Since we will be not be testing energy 
     CsmaHelper csma;
     csma.SetChannelAttribute("DataRate", StringValue("500kbps"));
     // Increased data rate for now, will be set to normal when a queue system is developed.
@@ -49,17 +50,17 @@ main()
     csma.SetChannelAttribute("Delay", TimeValue(NanoSeconds(6560)));
     NetDeviceContainer nodeDevices = csma.Install(devices);
 
-    INFO_LOG("Installing internet stack.");
+    // INFO_LOG("Installing internet stack.");
     InternetStackHelper internet;
     internet.Install(devices);
 
-    INFO_LOG("Assigning IP addresses.");
+    // INFO_LOG("Assigning IP addresses.");
     Ipv4AddressHelper address;
     address.SetBase("10.1.1.0", "255.255.255.0");
     Ipv4InterfaceContainer interfaces = address.Assign(nodeDevices);
 
     SinkManager sinkManager = SinkManager(sink, InetSocketAddress(interfaces.GetAddress(0), 8080));
-    // MaliciousNodeManager malicious_node_manger = MaliciousNodeManager(malicious_node, InetSocketAddress(interfaces.GetAddress(-1), 8080));
+    MaliciousNodeManager malicious_node_manger = MaliciousNodeManager(malicious_node, InetSocketAddress(interfaces.GetAddress(total_nodes+1), 8080));
 
     std::vector<std::unique_ptr<NodeManager>> nodeManagerContainer;
 
@@ -72,8 +73,10 @@ main()
                                           sinkManager.address));
     }
 
-    // Simulator::Schedule(Seconds(20),
-    //                     [&]() { nodeManagerContainer[0]->SinkPathBroadcastRequest(); });
+    Simulator::Schedule(Seconds(20),
+                        [&]() { malicious_node_manger.AddMaliciousNodeToWSN(); });
+    Simulator::Schedule(Seconds(22),
+                        [&]() { nodeManagerContainer[0]->SinkPathBroadcastRequest(); });
 
     Simulator::Run();
     Simulator::Destroy();

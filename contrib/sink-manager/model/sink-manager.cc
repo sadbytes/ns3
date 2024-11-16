@@ -62,6 +62,7 @@ SinkManager::InitializeCA()
 
     EVP_PKEY_CTX_free(pctx);
 
+    // Since we are directly sending sink public key to save evergy (sending less bytes and need to store) 
     // Create self-signed certificate
     ca_cert = X509_new();
     ASN1_INTEGER_set(X509_get_serialNumber(ca_cert), 1);
@@ -82,7 +83,8 @@ SinkManager::InitializeCA()
     ca_public_key = X509_get_pubkey(ca_cert);
     converted_ca_public_key = ConvertToUint8T(ca_public_key, converted_ca_public_key_size);
 
-    SUCCESS_LOG("CA keypair and certificate generated successfully.");
+    // SUCCESS_LOG("CA keypair and certificate generated successfully.");
+    SUCCESS_LOG("CA keypair generated successfully.");
 }
 
 X509*
@@ -129,7 +131,7 @@ SinkManager::GenerateUserCertificate(X509_REQ* csr)
     // X509_set_issuer_name(user_cert, issuer_name);
 
     // Sign the certificate with the CA's private key
-    if (X509_sign(user_cert, ca_keypair, EVP_sha256()) == 0)
+    if (X509_sign(user_cert, ca_keypair, EVP_sha256()) == 0) 
     {
         ERROR_LOG("Error signing user certificate.");
         X509_free(user_cert);
@@ -178,7 +180,7 @@ SinkManager::SendMessage(InetSocketAddress destination_address,
     // // INFO_LOG("Buffer: " << buffer);
     // INFO_LOG("Destination IP: " << destination_address.GetIpv4());
     // INFO_LOG("Destination PORT: " << destination_address.GetPort());
-    INFO_LOG("Sending data from " << address.GetIpv4() << " to " << destination_address.GetIpv4());
+    // INFO_LOG("Sending data from " << address.GetIpv4() << " to " << destination_address.GetIpv4());
     float energy_consumed = 59.2 * buffer_length;
     total_energy_consumed += energy_consumed;
     // INFO_LOG("Energy consumed by sink to send the data: " << energy_consumed << "µJ");
@@ -196,8 +198,8 @@ SinkManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
     uint8_t received_packet_size = packet->GetSize();
     InetSocketAddress destination_address = InetSocketAddress::ConvertFrom(received_from);
 
-    INFO_LOG("Sink Received from " << InetSocketAddress::ConvertFrom(received_from).GetIpv4()
-                                   << " of Size: " << packet->GetSize());                                   
+    // INFO_LOG("Sink Received from " << InetSocketAddress::ConvertFrom(received_from).GetIpv4()
+                                //    << " of Size: " << packet->GetSize());                                   
     float energy_consumed = 28.6 * received_packet_size;    
     total_energy_consumed += energy_consumed;                               
     // INFO_LOG("Energy consumed by sink to receive the data: " << energy_consumed << "µJ");

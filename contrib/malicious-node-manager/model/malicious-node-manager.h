@@ -17,6 +17,7 @@ class MaliciousNodeManager
     
 
     MaliciousNodeManager(Ptr<Node> node, InetSocketAddress address);
+    void AddMaliciousNodeToWSN();
     void HandleSocketReceive(Ptr<Socket> socket);
     void SendMessage(InetSocketAddress destination_address, const uint8_t* buffer, int buffer_length);
 };
