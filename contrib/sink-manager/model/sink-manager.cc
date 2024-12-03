@@ -28,7 +28,7 @@ SinkManager::SinkManager(Ptr<Node> node, InetSocketAddress address)
     : sink(node),
       address(address)
 {
-    INFO_LOG("Creating new sink on address " << address.GetIpv4() << ":" << address.GetPort());
+    // INFO_LOG("Creating new sink on address " << address.GetIpv4() << ":" << address.GetPort());
 
     InitializeCA();
 

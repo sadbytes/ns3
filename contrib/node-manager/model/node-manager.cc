@@ -49,7 +49,7 @@ NodeManager::NodeManager(Ptr<Node> node,
 
     // uint8_t lastByte = node_address.GetIpv4().Get() & 0xFF;
     // INFO_LOG(node_address.GetIpv4() << "  " << static_cast<int>(lastByte));
-    INFO_LOG("Generating Node " << node_id << " CSR");
+    // INFO_LOG("Generating Node " << node_id << " CSR");
     GenerateKeypairAndCSR();
 
     node_socket = Socket::CreateSocket(node, TypeId::LookupByName("ns3::UdpSocketFactory"));
@@ -160,7 +160,7 @@ NodeManager::VerifyCertificate(X509* cert)
 
     active_mode_time += Simulator::Now().GetSeconds() - function_start_time;
 
-    INFO_LOG("Certificate verified successfully.");
+    // INFO_LOG("Certificate verified successfully.");
     return true;
 }
 
@@ -337,6 +337,7 @@ NodeManager::ConnectWithNeighbourNode(InetSocketAddress address)
                                                   cert_size,
                                                   pack_buffer_size);
     request_sent.push_back(address);
+    INFO_LOG("Sending verification request to " << address.GetIpv4());
     SendMessage(address, packet_buffer, pack_buffer_size);
 }
 
@@ -422,7 +423,7 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
         X509* cert = ConvertToX509(neighbour_certificate, neighbour_certificate_size);
         if (VerifyCertificate(cert))
         {
-            SUCCESS_LOG("Certificate of node " << destination_address.GetIpv4() << " verified.");
+            // SUCCESS_LOG("Certificate of node " << destination_address.GetIpv4() << " verified.");
 
             uint8_t self_identifier = node_address.GetIpv4().Get() & 0xFF;
             size_t total_size = 5;
@@ -432,7 +433,8 @@ NodeManager::HandleSocketReceive(Ptr<ns3::Socket> socket)
 
             if (VerifyData(data, total_size, signed_data, signature_size, cert))
             {
-                SUCCESS_LOG("Signature of node " << destination_address.GetIpv4() << " verified.");
+                // SUCCESS_LOG("Signature of node " << destination_address.GetIpv4() << " verified.");
+                SUCCESS_LOG("Node " << destination_address.GetIpv4() << " verified.");
                 verified_nodes.push_back(destination_address);
                 ConnectWithNeighbourNode(destination_address);
             }
